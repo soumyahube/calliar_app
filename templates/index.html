@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calliar - Génération de trajectoire par KNN</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb4d);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 { text-align: center; color: white; margin-bottom: 10px; }
+        .subtitle { text-align: center; color: rgba(255,255,255,0.8); margin-bottom: 30px; }
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        .upload-area {
+            border: 3px dashed #1a2a6c;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f8f9fa;
+        }
+        .upload-area:hover { border-color: #b21f1f; background: #e9ecef; }
+        .preview-container {
+            display: flex;
+            gap: 30px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        .preview-box { flex: 1; text-align: center; }
+        .preview-box h3 { margin-bottom: 15px; color: #1a2a6c; }
+        .preview-image {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        canvas {
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            background: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 30px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.2s;
+        }
+        button:hover { transform: scale(1.02); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .loader {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #1a2a6c;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .result-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #d4edda;
+            border-radius: 10px;
+            border-left: 4px solid #28a745;
+        }
+        .result-info.error { background: #f8d7da; border-left-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Calliar - KNN Trajectory</h1>
+        <div class="subtitle">Recherche par similarité (voisin le plus proche)</div>
+        
+        <div class="card">
+            <div class="upload-area" id="uploadArea">
+                <p>📸 Cliquez ou glissez une image ici</p>
+                <p style="font-size: 12px; color: #666;">PNG, JPG, JPEG</p>
+                <input type="file" id="fileInput" accept="image/*" style="display: none;">
+            </div>
+            
+            <div style="text-align: center;">
+                <button id="predictBtn" disabled>🎯 Générer la trajectoire</button>
+            </div>
+            
+            <div class="preview-container" id="previewContainer" style="display: none;">
+                <div class="preview-box">
+                    <h3>📷 Image</h3>
+                    <img id="previewImage" class="preview-image" alt="Aperçu">
+                </div>
+                <div class="preview-box">
+                    <h3>✍️ Trajectoire</h3>
+                    <canvas id="trajectoryCanvas" width="400" height="400"></canvas>
+                </div>
+            </div>
+            
+            <div id="resultDiv" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const predictBtn = document.getElementById('predictBtn');
+        const previewContainer = document.getElementById('previewContainer');
+        const previewImage = document.getElementById('previewImage');
+        const trajectoryCanvas = document.getElementById('trajectoryCanvas');
+        const resultDiv = document.getElementById('resultDiv');
+        
+        let currentImageData = null;
+        
+        uploadArea.onclick = () => fileInput.click();
+        
+        fileInput.onchange = (e) => {
+            if (e.target.files.length) handleImage(e.target.files[0]);
+        };
+        
+        uploadArea.ondragover = (e) => { e.preventDefault(); uploadArea.style.borderColor = '#28a745'; };
+        uploadArea.ondragleave = () => { uploadArea.style.borderColor = '#1a2a6c'; };
+        uploadArea.ondrop = (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#1a2a6c';
+            if (e.dataTransfer.files.length) handleImage(e.dataTransfer.files[0]);
+        };
+        
+        function handleImage(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                currentImageData = e.target.result;
+                previewImage.src = currentImageData;
+                previewContainer.style.display = 'flex';
+                predictBtn.disabled = false;
+                resultDiv.style.display = 'none';
+                
+                const ctx = trajectoryCanvas.getContext('2d');
+                ctx.clearRect(0, 0, trajectoryCanvas.width, trajectoryCanvas.height);
+                ctx.fillStyle = '#999';
+                ctx.font = '14px Arial';
+                ctx.fillText('En attente...', 160, 200);
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        predictBtn.onclick = async () => {
+            if (!currentImageData) return;
+            
+            predictBtn.disabled = true;
+            predictBtn.innerHTML = '🔄 Génération... <span class="loader"></span>';
+            
+            try {
+                const res = await fetch('/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: currentImageData })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    drawTrajectory(data.strokes);
+                    resultDiv.innerHTML = `
+                        <div class="result-info">
+                            ✅ <strong>Résultat</strong><br>
+                            📝 Mot trouvé: <strong>${data.best_match || '?'}</strong><br>
+                            🎯 Confiance: ${(data.confidence * 100).toFixed(1)}%<br>
+                            ⏱️ Temps: ${data.time}s
+                        </div>
+                    `;
+                    resultDiv.style.display = 'block';
+                } else {
+                    resultDiv.innerHTML = `<div class="result-info error">❌ Erreur: ${data.error}</div>`;
+                    resultDiv.style.display = 'block';
+                }
+            } catch(err) {
+                resultDiv.innerHTML = `<div class="result-info error">❌ Erreur réseau: ${err.message}</div>`;
+                resultDiv.style.display = 'block';
+            } finally {
+                predictBtn.disabled = false;
+                predictBtn.innerHTML = '🎯 Générer la trajectoire';
+            }
+        };
+        
+        function drawTrajectory(strokes) {
+            const canvas = trajectoryCanvas;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width, h = canvas.height;
+            
+            ctx.clearRect(0, 0, w, h);
+            
+            if (!strokes || strokes.length === 0) {
+                ctx.fillStyle = '#999';
+                ctx.fillText('Aucune trajectoire', w/2-60, h/2);
+                return;
+            }
+            
+            const colors = ['#1a2a6c', '#b21f1f', '#fdbb4d', '#28a745'];
+            
+            strokes.forEach((stroke, idx) => {
+                if (stroke.length < 2) return;
+                ctx.beginPath();
+                const start = stroke[0];
+                ctx.moveTo(start[0] * w, start[1] * h);
+                for (let i = 1; i < stroke.length; i++) {
+                    ctx.lineTo(stroke[i][0] * w, stroke[i][1] * h);
+                }
+                ctx.strokeStyle = colors[idx % colors.length];
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+            });
+            
+            // Début
+            if (strokes[0] && strokes[0].length) {
+                const start = strokes[0][0];
+                ctx.beginPath();
+                ctx.arc(start[0] * w, start[1] * h, 6, 0, 2*Math.PI);
+                ctx.fillStyle = '#28a745';
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 10px Arial';
+                ctx.fillText('Début', start[0] * w - 12, start[1] * h - 5);
+            }
+            
+            // Fin
+            const lastStroke = strokes[strokes.length-1];
+            if (lastStroke && lastStroke.length) {
+                const end = lastStroke[lastStroke.length-1];
+                ctx.beginPath();
+                ctx.arc(end[0] * w, end[1] * h, 6, 0, 2*Math.PI);
+                ctx.fillStyle = '#dc3545';
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 10px Arial';
+                ctx.fillText('Fin', end[0] * w - 8, end[1] * h - 5);
+            }
+        }
+    </script>
+</body>
+</html>
