@@ -4,7 +4,7 @@ import pickle
 import os
 
 class KNNTrajectoryService:
-    def __init__(self, pkl_path='data/knn_calliar_k1.pkl'):
+    def __init__(self, pkl_path='data/knn_calliar.pkl'):
         """Charge le modèle KNN"""
         if not os.path.exists(pkl_path):
             raise FileNotFoundError(f"Fichier non trouvé: {pkl_path}")
