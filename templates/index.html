@@ -573,7 +573,7 @@
   dc.fillStyle = '#ffffff';
   dc.fillRect(0, 0, 400, 400);
   dc.strokeStyle = '#111111';
-  dc.lineWidth = 6;
+  dc.lineWidth = 2;
   dc.lineCap = 'round';
   dc.lineJoin = 'round';
 
@@ -581,7 +581,55 @@
   const ac = animCanvas.getContext('2d');
   ac.fillStyle = '#ffffff';
   ac.fillRect(0, 0, 400, 400);
+  function preprocessCanvas(canvas) {
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      const pixels = ctx.getImageData(0, 0, w, h).data;
+ 
+       // 1. Trouver la bounding box du dessin
+        let xMin = w, xMax = 0, yMin = h, yMax = 0;
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const r = pixels[(y * w + x) * 4];
+                if (r < 128) { // pixel noir
+                   if (x < xMin) xMin = x;
+                   if (x > xMax) xMax = x;
+                   if (y < yMin) yMin = y;
+                   if (y > yMax) yMax = y;
+                }
+            }
+        }
 
+       // Si rien de dessiné
+       if (xMin >= xMax || yMin >= yMax) return canvas.toDataURL('image/png');
+
+       // 2. Ajouter padding de 10%
+       const pw = Math.round((xMax - xMin) * 0.1);
+       const ph = Math.round((yMax - yMin) * 0.1);
+       xMin = Math.max(0, xMin - pw);
+       xMax = Math.min(w, xMax + pw);
+       yMin = Math.max(0, yMin - ph);
+       yMax = Math.min(h, yMax + ph);
+
+       // 3. Recadrer et redimensionner en 224x224
+       const offscreen = document.createElement('canvas');
+       offscreen.width = 224;
+       offscreen.height = 224;
+       const octx = offscreen.getContext('2d');
+
+       //  Fond blanc
+       octx.fillStyle = '#ffffff';
+       octx.fillRect(0, 0, 224, 224);
+
+       // Copier la zone recadrée en 224x224
+        octx.drawImage(canvas,
+          xMin, yMin, xMax - xMin, yMax - yMin,
+          0, 0, 224, 224
+        );
+
+        return offscreen.toDataURL('image/png');
+ }
   /* ══════════════════════════════════════
      DRAW EVENTS
   ══════════════════════════════════════ */
@@ -751,7 +799,7 @@
         showToast('⚠ يبدو أن الرسم يحتوي أكثر من كلمة — امسح وارسم كلمة واحدة فقط');
         return;
       }
-      imageData = drawCanvas.toDataURL('image/png');
+      imageData = preprocessCanvas(drawCanvas);
     } else {
       if (!uploadedDataURL) {
         showToast('⚠ اختر صورة أولاً');
