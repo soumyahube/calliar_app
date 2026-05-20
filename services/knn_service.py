@@ -1,11 +1,10 @@
-# calliar_app/services/knn_service.py
+# services/knn_service.py
 import numpy as np
 import pickle
 import os
 
 class KNNTrajectoryService:
-    def __init__(self, pkl_path='data/knn_calliar.pkl'):
-        """Charge le modèle KNN"""
+    def __init__(self, pkl_path='data/knn_calliar_Flask.pkl'):
         if not os.path.exists(pkl_path):
             raise FileNotFoundError(f"Fichier non trouvé: {pkl_path}")
         
@@ -18,19 +17,17 @@ class KNNTrajectoryService:
         self.emb_mean = data['emb_mean']
         self.emb_std = data['emb_std']
         
-        # Reconstruire le KNN
+        # Vérifier les trajectoires
+        print(f"✅ KNN chargé: {len(self.train_embs)} exemples")
+        print(f"   Shape des trajectoires: {self.train_trajs.shape}")
+        print(f"   Exemple trajectoire - min: {self.train_trajs[0].min():.4f}, max: {self.train_trajs[0].max():.4f}")
+        
         from sklearn.neighbors import NearestNeighbors
         self.knn = NearestNeighbors(n_neighbors=1, metric='cosine')
         self.knn.fit(self.train_embs)
-        
-        print(f"✅ KNN chargé: {len(self.train_embs)} exemples")
     
     def find_trajectory(self, embedding):
-        """Retourne la trajectoire du voisin le plus proche"""
-        # Normaliser
         q = ((embedding - self.emb_mean) / self.emb_std).reshape(1, -1)
-        
-        # Recherche
         distances, indices = self.knn.kneighbors(q)
         
         idx = indices[0][0]
