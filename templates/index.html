@@ -1,326 +1,950 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calliar - Génération de trajectoire par KNN</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb4d); min-height: 100vh; padding: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        h1 { text-align: center; color: white; margin-bottom: 10px; }
-        .subtitle { text-align: center; color: rgba(255,255,255,0.8); margin-bottom: 30px; }
-        .card { background: white; border-radius: 20px; padding: 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
-        .upload-area { border: 3px dashed #1a2a6c; border-radius: 20px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.3s; background: #f8f9fa; }
-        .upload-area:hover { border-color: #b21f1f; background: #e9ecef; }
-        .preview-container { display: flex; gap: 30px; margin-top: 30px; flex-wrap: wrap; }
-        .preview-box { flex: 1; text-align: center; }
-        .preview-box h3 { margin-bottom: 15px; color: #1a2a6c; }
-        .preview-image { max-width: 100%; max-height: 200px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        canvas { width: 100%; max-width: 400px; border: 1px solid #ddd; border-radius: 10px; background: white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        button { background: linear-gradient(135deg, #1a2a6c, #b21f1f); color: white; border: none; padding: 12px 30px; border-radius: 30px; font-size: 16px; cursor: pointer; margin-top: 20px; transition: transform 0.2s; }
-        button:hover { transform: scale(1.02); }
-        button:disabled { opacity: 0.6; cursor: not-allowed; }
-        .loader { display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #1a2a6c; border-radius: 50%; animation: spin 1s linear infinite; margin-left: 10px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .result-info { margin-top: 20px; padding: 15px; background: #d4edda; border-radius: 10px; border-left: 4px solid #28a745; }
-        .result-info.error { background: #f8d7da; border-left-color: #dc3545; }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arabic Stroke Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        /* ── Animation de dessin ── */
-        #animBtn { background: linear-gradient(135deg, #28a745, #1a2a6c); margin-left: 10px; }
-        .debug-info { font-size: 11px; color: #888; margin-top: 5px; }
-    </style>
+    :root {
+  --bg: #f4efe7;
+  --surface: #e6d8c8;
+  --surface2: #d2b89c;
+  --border: #b89b7b;
+  --border2: #9a7652;
+
+  --text: #3e2412;
+  --text2: #6a4a2d;
+  --text3: #8b6a4f;
+
+  --accent: #8b5a2b;
+  --accent2: #5a3412;
+
+  --green: #7a9b76;
+  --red: #b05a4a;
+  --amber: #c28a52;
+}
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Tajawal', sans-serif;
+      min-height: 100vh;
+      direction: rtl;
+    }
+
+    /* ── HEADER ── */
+    header {
+      padding: 2rem 2.5rem 1.5rem;
+      border-bottom: 0.5px solid var(--border);
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .logo-mark {
+      width: 44px; height: 44px;
+      border: 1.5px solid var(--accent);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      color: var(--accent);
+      font-weight: 700;
+      letter-spacing: -1px;
+    }
+    .logo-text h1 {
+      font-size: 18px; font-weight: 700; color: var(--text);
+      letter-spacing: 0.02em;
+    }
+    .logo-text p {
+      font-size: 12px; color: var(--text3);
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.04em;
+    }
+    .badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 4px 10px;
+      border: 0.5px solid var(--border2);
+      border-radius: 20px;
+      color: var(--text3);
+    }
+
+    /* ── LAYOUT ── */
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      min-height: calc(100vh - 95px);
+    }
+
+    /* ── LEFT PANEL ── */
+    .panel-left {
+      border-left: 0.5px solid var(--border);
+      padding: 2rem 2.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text3);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    /* TABS */
+    .tabs {
+      display: flex;
+      gap: 6px;
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+    }
+    .tab {
+      flex: 1;
+      padding: 8px;
+      background: transparent;
+      border: none;
+      border-radius: 7px;
+      color: var(--text2);
+      font-family: 'Tajawal', sans-serif;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px;
+    }
+    .tab.active {
+      background: var(--surface2);
+      color: var(--text);
+      border: 0.5px solid var(--border2);
+    }
+    .tab svg { width: 15px; height: 15px; }
+
+    /* PANELS */
+    .input-panel { display: none; }
+    .input-panel.active { display: flex; flex-direction: column; gap: 10px; }
+
+    /* CANVAS */
+    .canvas-container {
+      position: relative;
+      border: 0.5px solid var(--border2);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #ffffff;
+      aspect-ratio: 1 / 1;
+      max-height: 300px;
+    }
+    canvas#drawCanvas {
+      display: block;
+      width: 100%; height: 100%;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    .canvas-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .canvas-overlay span {
+      font-size: 13px;
+      color: #aaa;
+      border: 1px dashed #ddd;
+      padding: 8px 16px;
+      border-radius: 8px;
+    }
+
+    /* UPLOAD */
+    .upload-zone {
+      border: 1px dashed var(--border2);
+      border-radius: 12px;
+      padding: 2.5rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: var(--surface);
+    }
+    .upload-zone:hover { border-color: var(--accent); background: var(--surface2); }
+    .upload-zone svg { margin: 0 auto 10px; display: block; opacity: 0.4; }
+    .upload-zone p { font-size: 14px; color: var(--text2); }
+    .upload-zone span { font-size: 12px; color: var(--text3); }
+    #previewWrap { display: none; text-align: center; }
+    #previewWrap img {
+      max-width: 100%; max-height: 240px;
+      border-radius: 10px;
+      border: 0.5px solid var(--border2);
+    }
+    #fileInput { display: none; }
+
+    /* HINT */
+    .hint {
+      font-size: 12px;
+      color: var(--text3);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .hint svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+    /* BUTTONS */
+    .btn-group {
+      display: flex; gap: 8px;
+    }
+    .btn {
+      flex: 1;
+      padding: 11px;
+      border-radius: 10px;
+      font-family: 'Tajawal', sans-serif;
+      font-size: 14px;
+      cursor: pointer;
+      border: 0.5px solid var(--border2);
+      background: var(--surface);
+      color: var(--text2);
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+    .btn:active { transform: scale(0.97); }
+    .btn-run {
+      background: var(--accent);
+      color: #0d0d0f;
+      border-color: var(--accent);
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .btn-run:hover { background: var(--accent2); border-color: var(--accent2); color: #0d0d0f; }
+    .btn-clear { color: var(--red); border-color: transparent; }
+    .btn-clear:hover { background: rgba(224,92,92,0.08); color: var(--red); }
+
+    /* ── RIGHT PANEL ── */
+    .panel-right {
+      padding: 2rem 2.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    /* ANIM OUTPUT */
+    .anim-container {
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #ffffff;
+      aspect-ratio: 1 / 1;
+      max-height: 300px;
+      position: relative;
+    }
+    canvas#animCanvas {
+      display: block;
+      width: 100%; height: 100%;
+    }
+    .anim-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .anim-placeholder svg { opacity: 0.15; }
+    .anim-placeholder p { font-size: 13px; color: var(--text3); }
+
+    /* STATUS */
+    .status-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px;
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: 10px;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text3); flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .dot.running { background: var(--amber); animation: blink 1s infinite; }
+    .dot.done { background: var(--green); }
+    .dot.error { background: var(--red); }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    #statusTxt { font-size: 13px; color: var(--text2); flex: 1; }
+
+    /* METRICS */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .metric {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .metric-label {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text3);
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+    .metric-val {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* PROGRESS */
+    .progress-wrap { display: flex; align-items: center; gap: 10px; }
+    .progress-track {
+      flex: 1; height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+    .progress-pct {
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text3);
+      min-width: 36px;
+      text-align: left;
+    }
+
+    /* EXPORT */
+    .export-row { display: flex; gap: 8px; }
+
+    /* ERROR TOAST */
+    .toast {
+      display: none;
+      padding: 10px 14px;
+      background: rgba(224,92,92,0.1);
+      border: 0.5px solid rgba(224,92,92,0.3);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--red);
+    }
+
+    /* LIMIT BANNER */
+    .limit-banner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 13px;
+      background: rgba(194,138,82,0.12);
+      border: 0.5px solid rgba(194,138,82,0.4);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--amber);
+    }
+    .limit-banner.visible { display: flex; }
+    .limit-banner svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    /* STROKE COUNTER */
+    .stroke-counter {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text3);
+    }
+    .stroke-counter .lifts { color: var(--accent); font-weight: 600; }
+    .stroke-counter .lifts.warn { color: var(--red); }
+
+    /* CANVAS WORD LIMIT overlay */
+    .canvas-limit-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(176,90,74,0.10);
+      border: 2px solid var(--red);
+      border-radius: 12px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .canvas-limit-overlay.show { display: flex; }
+    .canvas-limit-overlay span {
+      background: var(--red);
+      color: white;
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 20px;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 700px) {
+      main { grid-template-columns: 1fr; }
+      .panel-left { border-left: none; border-bottom: 0.5px solid var(--border); }
+      header { padding: 1.25rem; }
+      .panel-left, .panel-right { padding: 1.25rem; }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎨 Calliar - KNN Trajectory</h1>
-        <div class="subtitle">Recherche par similarité (voisin le plus proche)</div>
-        <div class="card">
-            <div class="upload-area" id="uploadArea">
-                <p>📸 Cliquez ou glissez une image ici</p>
-                <p style="font-size: 12px; color: #666;">PNG, JPG, JPEG</p>
-                <input type="file" id="fileInput" accept="image/*" style="display: none;">
-            </div>
-            <div style="text-align: center;">
-                <button id="predictBtn" disabled>🎯 Générer la trajectoire</button>
-                <button id="animBtn" disabled>▶️ Animer</button>
-            </div>
-            <div class="preview-container" id="previewContainer" style="display: none;">
-                <div class="preview-box">
-                    <h3>📷 Image</h3>
-                    <img id="previewImage" class="preview-image" alt="Aperçu">
-                </div>
-                <div class="preview-box">
-                    <h3>✍️ Trajectoire</h3>
-                    <canvas id="trajectoryCanvas" width="400" height="400"></canvas>
-                    <div class="debug-info" id="debugInfo"></div>
-                </div>
-            </div>
-            <div id="resultDiv" style="display: none;"></div>
-        </div>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">ب</div>
+    <div class="logo-text">
+      <h1>Arabic Stroke Generator</h1>
+      <p>CNN + LSTM · deep learning</p>
+    </div>
+  </div>
+  <span class="badge">v1.0.0</span>
+</header>
+
+<main>
+
+  <!-- ══ LEFT : INPUT ══ -->
+  <section class="panel-left">
+
+    <div>
+      <p class="section-label">01 — saisie</p>
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('draw', this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21l9-9m0 0l2-6 4 4-6 2z"/></svg>
+          رسم يدوي
+        </button>
+        <button class="tab" onclick="switchTab('upload', this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          تحميل صورة
+        </button>
+      </div>
     </div>
 
-    <script>
-        const uploadArea   = document.getElementById('uploadArea');
-        const fileInput    = document.getElementById('fileInput');
-        const predictBtn   = document.getElementById('predictBtn');
-        const animBtn      = document.getElementById('animBtn');
-        const previewContainer = document.getElementById('previewContainer');
-        const previewImage = document.getElementById('previewImage');
-        const trajectoryCanvas = document.getElementById('trajectoryCanvas');
-        const resultDiv    = document.getElementById('resultDiv');
-        const debugInfo    = document.getElementById('debugInfo');
-        let currentImageData = null;
-        let lastStrokes = null;
+    <!-- DRAW TAB -->
+    <div id="tab-draw" class="input-panel active">
+      <div class="canvas-container">
+        <canvas id="drawCanvas" width="400" height="400"></canvas>
+        <div class="canvas-overlay" id="canvasOverlay">
+          <span>ارسم حرفاً أو كلمة واحدة هنا</span>
+        </div>
+        <div class="canvas-limit-overlay" id="limitOverlay">
+          <span>⚠ كلمة واحدة فقط — امسح وأعد الرسم</span>
+        </div>
+      </div>
 
-        uploadArea.onclick = () => fileInput.click();
-        fileInput.onchange = (e) => { if (e.target.files.length) handleImage(e.target.files[0]); };
-        uploadArea.ondragover = (e) => { e.preventDefault(); uploadArea.style.borderColor = '#28a745'; };
-        uploadArea.ondragleave = () => { uploadArea.style.borderColor = '#1a2a6c'; };
-        uploadArea.ondrop = (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = '#1a2a6c';
-            if (e.dataTransfer.files.length) handleImage(e.dataTransfer.files[0]);
-        };
+      <!-- compteur de levées de stylo -->
+      <div class="stroke-counter">
+        <span>عدد الحركات المستمرة (strokes)</span>
+        <span id="strokeCount" class="lifts">0</span>
+      </div>
 
-        function handleImage(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                currentImageData = e.target.result;
-                previewImage.src = currentImageData;
-                previewContainer.style.display = 'flex';
-                predictBtn.disabled = false;
-                animBtn.disabled = true;
-                resultDiv.style.display = 'none';
-                const ctx = trajectoryCanvas.getContext('2d');
-                ctx.clearRect(0, 0, trajectoryCanvas.width, trajectoryCanvas.height);
-                ctx.fillStyle = '#bbb';
-                ctx.font = '14px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('En attente de génération...', 200, 200);
-            };
-            reader.readAsDataURL(file);
+      <!-- bannière avertissement mot unique -->
+      <div class="limit-banner" id="limitBanner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        النموذج يتعرف على <strong>كلمة واحدة فقط</strong> — سيعيد أقرب كلمة من قاعدة البيانات
+      </div>
+
+      <p class="hint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        ارسم حرفاً أو كلمة واحدة واضحة بخط عريض — مثال : ب ، نور ، سلام
+      </p>
+    </div>
+
+    <!-- UPLOAD TAB -->
+    <div id="tab-upload" class="input-panel">
+      <div class="upload-zone" onclick="document.getElementById('fileInput').click()" id="dropZone">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 12l2 2 4-4"/></svg>
+        <p>انقر لاختيار صورة</p>
+        <span>PNG · JPG · حرف عربي معزول</span>
+      </div>
+      <div id="previewWrap">
+        <img id="previewImg" alt="معاينة الحرف" />
+      </div>
+      <input type="file" id="fileInput" accept="image/*" />
+      <p class="hint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        صورة بخلفية بيضاء — <strong>كلمة واحدة</strong> معزولة، 64×64 px على الأقل
+      </p>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-run" onclick="runModel()">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        توليد المسار
+      </button>
+      <button class="btn btn-clear" onclick="clearAll()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+        مسح
+      </button>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+  </section>
+
+  <!-- ══ RIGHT : OUTPUT ══ -->
+  <section class="panel-right">
+
+    <div>
+      <p class="section-label">02 — النتيجة</p>
+      <div class="anim-container">
+        <canvas id="animCanvas" width="400" height="400"></canvas>
+        <div class="anim-placeholder" id="animPlaceholder">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1"><path d="M3 21l9-9m0 0l2-6 4 4-6 2z"/></svg>
+          <p>المسار المُولَّد سيظهر هنا</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-row">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusTxt">في انتظار حرف…</span>
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">POINTS</div>
+        <div class="metric-val" id="mPoints">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">TIME (s)</div>
+        <div class="metric-val" id="mTime">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">CONF %</div>
+        <div class="metric-val" id="mConf">—</div>
+      </div>
+    </div>
+
+    <div class="progress-wrap">
+      <span style="font-size:12px;color:var(--text3);font-family:'JetBrains Mono',monospace;min-width:60px">ANIM</span>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <span class="progress-pct" id="progressPct">0%</span>
+    </div>
+
+    <div class="export-row">
+      <button class="btn" onclick="downloadPNG()" style="flex:1">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        تصدير PNG
+      </button>
+      <button class="btn" onclick="downloadJSON()" style="flex:1">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        تصدير JSON
+      </button>
+    </div>
+
+  </section>
+</main>
+
+<script>
+  /* ══════════════════════════════════════
+     STATE
+  ══════════════════════════════════════ */
+  let activeTab = 'draw';
+  let isDrawing = false;
+  let drawnPoints = [];
+  let lastPredictedPoints = [];
+  let animReq = null;
+  let uploadedDataURL = null;
+
+  // ── Compteur de strokes dessinés (levées de stylo) ──
+  let strokeLifts = 0;          // nb de fois que l'utilisateur a levé le stylo
+  const MAX_STROKES = 8;        // limite raisonnable pour un mot arabe
+
+  /* ══════════════════════════════════════
+     CANVAS SETUP
+  ══════════════════════════════════════ */
+  const drawCanvas = document.getElementById('drawCanvas');
+  const dc = drawCanvas.getContext('2d');
+  dc.fillStyle = '#ffffff';
+  dc.fillRect(0, 0, 400, 400);
+  dc.strokeStyle = '#111111';
+  dc.lineWidth = 6;
+  dc.lineCap = 'round';
+  dc.lineJoin = 'round';
+
+  const animCanvas = document.getElementById('animCanvas');
+  const ac = animCanvas.getContext('2d');
+  ac.fillStyle = '#ffffff';
+  ac.fillRect(0, 0, 400, 400);
+
+  /* ══════════════════════════════════════
+     DRAW EVENTS
+  ══════════════════════════════════════ */
+  function getPos(e, canvas) {
+    const r = canvas.getBoundingClientRect();
+    const sx = canvas.width / r.width;
+    const sy = canvas.height / r.height;
+    if (e.touches) {
+      return { x: (e.touches[0].clientX - r.left) * sx, y: (e.touches[0].clientY - r.top) * sy };
+    }
+    return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+  }
+
+  drawCanvas.addEventListener('mousedown', e => {
+    isDrawing = true;
+    document.getElementById('canvasOverlay').style.opacity = '0';
+    const p = getPos(e, drawCanvas);
+    dc.beginPath(); dc.moveTo(p.x, p.y);
+    drawnPoints.push(p);
+    strokeLifts++;
+    updateStrokeCounter();
+  });
+  drawCanvas.addEventListener('mousemove', e => {
+    if (!isDrawing) return;
+    const p = getPos(e, drawCanvas);
+    dc.lineTo(p.x, p.y); dc.stroke();
+    drawnPoints.push(p);
+  });
+  drawCanvas.addEventListener('mouseup', () => { isDrawing = false; dc.beginPath(); });
+  drawCanvas.addEventListener('mouseleave', () => { isDrawing = false; dc.beginPath(); });
+
+  drawCanvas.addEventListener('touchstart', e => {
+    e.preventDefault(); isDrawing = true;
+    document.getElementById('canvasOverlay').style.opacity = '0';
+    const p = getPos(e, drawCanvas);
+    dc.beginPath(); dc.moveTo(p.x, p.y);
+    drawnPoints.push(p);
+    strokeLifts++;
+    updateStrokeCounter();
+  }, { passive: false });
+  drawCanvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (!isDrawing) return;
+    const p = getPos(e, drawCanvas);
+    dc.lineTo(p.x, p.y); dc.stroke();
+    drawnPoints.push(p);
+  }, { passive: false });
+  drawCanvas.addEventListener('touchend', () => { isDrawing = false; dc.beginPath(); });
+
+  /* ══════════════════════════════════════
+     STROKE COUNTER & LIMIT
+  ══════════════════════════════════════ */
+  function updateStrokeCounter() {
+    const el = document.getElementById('strokeCount');
+    const banner = document.getElementById('limitBanner');
+    const overlay = document.getElementById('limitOverlay');
+
+    el.textContent = strokeLifts;
+
+    if (strokeLifts > MAX_STROKES) {
+      el.classList.add('warn');
+      overlay.classList.add('show');
+      banner.classList.add('visible');
+    } else if (strokeLifts >= 2) {
+      el.classList.remove('warn');
+      overlay.classList.remove('show');
+      banner.classList.add('visible');   // rappel doux dès 2 strokes
+    } else {
+      el.classList.remove('warn');
+      overlay.classList.remove('show');
+      banner.classList.remove('visible');
+    }
+  }
+
+  /* ══════════════════════════════════════
+     TABS
+  ══════════════════════════════════════ */
+  function switchTab(name, btn) {
+    activeTab = name;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.input-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+  }
+
+  /* ══════════════════════════════════════
+     FILE UPLOAD
+  ══════════════════════════════════════ */
+  document.getElementById('fileInput').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      uploadedDataURL = ev.target.result;
+      const img = document.getElementById('previewImg');
+      img.src = uploadedDataURL;
+      document.getElementById('previewWrap').style.display = 'block';
+      document.getElementById('dropZone').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  /* ══════════════════════════════════════
+     CLEAR
+  ══════════════════════════════════════ */
+  function clearAll() {
+    if (animReq) cancelAnimationFrame(animReq);
+    dc.fillStyle = '#ffffff';
+    dc.fillRect(0, 0, 400, 400);
+    drawnPoints = [];
+    strokeLifts = 0;
+    updateStrokeCounter();
+    document.getElementById('canvasOverlay').style.opacity = '1';
+
+    ac.fillStyle = '#ffffff';
+    ac.fillRect(0, 0, 400, 400);
+    document.getElementById('animPlaceholder').style.display = 'flex';
+
+    uploadedDataURL = null;
+    document.getElementById('previewWrap').style.display = 'none';
+    document.getElementById('dropZone').style.display = 'block';
+    document.getElementById('fileInput').value = '';
+
+    setStatus('idle', 'في انتظار حرف…');
+    document.getElementById('mPoints').textContent = '—';
+    document.getElementById('mTime').textContent = '—';
+    document.getElementById('mConf').textContent = '—';
+    setProgress(0);
+    lastPredictedPoints = [];
+    hideToast();
+  }
+
+  /* ══════════════════════════════════════
+     STATUS HELPERS
+  ══════════════════════════════════════ */
+  function setStatus(state, msg) {
+    const dot = document.getElementById('statusDot');
+    dot.className = 'dot' + (state !== 'idle' ? ' ' + state : '');
+    document.getElementById('statusTxt').textContent = msg;
+  }
+  function setProgress(pct) {
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressPct').textContent = Math.round(pct) + '%';
+  }
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.display = 'block';
+  }
+  function hideToast() {
+    document.getElementById('toast').style.display = 'none';
+  }
+
+  /* ══════════════════════════════════════
+     RUN MODEL  ← appel Flask réel
+  ══════════════════════════════════════ */
+  async function runModel() {
+    hideToast();
+
+    let imageData;
+    if (activeTab === 'draw') {
+      if (drawnPoints.length < 5) {
+        showToast('⚠ ارسم حرفاً أو كلمة أولاً قبل التوليد');
+        return;
+      }
+      if (strokeLifts > MAX_STROKES) {
+        showToast('⚠ يبدو أن الرسم يحتوي أكثر من كلمة — امسح وارسم كلمة واحدة فقط');
+        return;
+      }
+      imageData = drawCanvas.toDataURL('image/png');
+    } else {
+      if (!uploadedDataURL) {
+        showToast('⚠ اختر صورة أولاً');
+        return;
+      }
+      imageData = uploadedDataURL;
+    }
+
+    if (animReq) cancelAnimationFrame(animReq);
+    document.getElementById('animPlaceholder').style.display = 'none';
+    setStatus('running', 'ترميز CNN…');
+    setProgress(0);
+
+    try {
+      const t0 = performance.now();
+
+      const res = await fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageData })
+      });
+
+      if (!res.ok) throw new Error('خطأ في الخادم : ' + res.status);
+
+      const data = await res.json();
+
+      const elapsed = data.time !== undefined
+        ? data.time.toFixed(2)
+        : ((performance.now() - t0) / 1000).toFixed(2);
+
+      lastPredictedPoints = data.points;
+      document.getElementById('mPoints').textContent = data.points.length;
+      document.getElementById('mTime').textContent = elapsed + 's';
+      document.getElementById('mConf').textContent =
+        data.confidence !== undefined
+          ? (data.confidence * 100).toFixed(1) + '%'
+          : '—';
+
+      // Afficher le mot trouvé dans la status bar
+      const matchLabel = data.best_match ? ` — « ${data.best_match} »` : '';
+      setStatus('done', 'تم التوليد' + matchLabel + ' ✓');
+
+      animateStroke(data.points, data.strokes);
+
+    } catch (err) {
+      setStatus('error', 'خطأ في الاتصال بالنموذج');
+      showToast('❌ ' + err.message + ' — تأكد أن Flask يعمل على localhost:5000');
+      console.error(err);
+    }
+  }
+
+  /* ══════════════════════════════════════
+     ANIMATE STROKE
+  ══════════════════════════════════════ */
+  function animateStroke(points) {
+    if (!points || points.length < 2) return;
+
+    // Fond noir
+    ac.fillStyle = '#ffffff';
+    ac.fillRect(0, 0, 400, 400);
+
+    // Normaliser dans [pad, 400-pad]
+    const xs  = points.map(p => p[0]);
+    const ys  = points.map(p => p[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const rangeX = maxX - minX || 1;
+    const rangeY = maxY - minY || 1;
+    const range  = Math.max(rangeX, rangeY);
+    const pad    = 50;
+    const scale  = (400 - pad * 2) / range;
+
+    // Centrer
+    const offX = pad + (400 - pad*2 - rangeX * scale) / 2;
+    const offY = pad + (400 - pad*2 - rangeY * scale) / 2;
+
+    const norm = points.map(p => ({
+        x: offX + (p[0] - minX) * scale,
+        y: offY + (p[1] - minY) * scale
+    }));
+
+    // Diviser en strokes — couper quand saut > seuil
+    const THRESHOLD = 60;
+    const strokes = [];
+    let current   = [norm[0]];
+    console.log("points reçus:", norm.length, "premier:", norm[0]);
+    for (let i = 1; i < norm.length; i++) {
+        const dx   = norm[i].x - norm[i-1].x;
+        const dy   = norm[i].y - norm[i-1].y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > THRESHOLD) {
+            if (current.length > 1) strokes.push(current);
+            current = [norm[i]];
+        } else {
+            current.push(norm[i]);
+        }
+    }
+    if (current.length > 1) strokes.push(current);
+
+    // Aplatir pour animation
+    const allSegments = [];
+    strokes.forEach((stroke, si) => {
+        stroke.forEach((pt, pi) => {
+            allSegments.push({
+                pt,
+                isFirst : pi === 0,
+                stroke  : si
+            });
+        });
+    });
+
+    let i = 1;
+    const total = allSegments.length;
+
+    // Point de départ
+    ac.fillStyle = '#4ecb8d';
+    ac.beginPath();
+    ac.arc(norm[0].x, norm[0].y, 5, 0, Math.PI*2);
+    ac.fill();
+
+    ac.strokeStyle = '#1a1a1a';
+    ac.lineWidth   = 2.5;
+    ac.lineCap     = 'round';
+    ac.lineJoin    = 'round';
+
+    // Commencer premier stroke
+    ac.beginPath();
+    ac.moveTo(allSegments[0].pt.x, allSegments[0].pt.y);
+
+    function step() {
+        if (i >= total) {
+            // Point final
+            ac.fillStyle = '#e05c5c';
+            ac.beginPath();
+            ac.arc(allSegments[total-1].pt.x,
+                   allSegments[total-1].pt.y, 5, 0, Math.PI*2);
+            ac.fill();
+            setProgress(100);
+            setStatus('done', 'اكتمل التوليد ✓');
+            return;
         }
 
-        predictBtn.onclick = async () => {
-            if (!currentImageData) return;
-            predictBtn.disabled = true;
-            animBtn.disabled = true;
-            predictBtn.innerHTML = '🔄 Génération... <span class="loader"></span>';
-            try {
-                const res = await fetch('/predict', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: currentImageData })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    lastStrokes = data.strokes;
-                    drawTrajectory(data.strokes);
-                    animBtn.disabled = false;
-                    resultDiv.innerHTML = `<div class="result-info">
-                        ✅ <strong>Résultat</strong><br>
-                        📝 Mot trouvé: <strong>${data.best_match || '?'}</strong><br>
-                        🎯 Confiance: ${(data.confidence * 100).toFixed(1)}%<br>
-                        ⏱️ Temps: ${data.time}s
-                    </div>`;
-                    resultDiv.style.display = 'block';
-                } else {
-                    resultDiv.innerHTML = `<div class="result-info error">❌ Erreur: ${data.error}</div>`;
-                    resultDiv.style.display = 'block';
-                }
-            } catch(err) {
-                resultDiv.innerHTML = `<div class="result-info error">❌ Erreur réseau: ${err.message}</div>`;
-                resultDiv.style.display = 'block';
-            } finally {
-                predictBtn.disabled = false;
-                predictBtn.innerHTML = '🎯 Générer la trajectoire';
-            }
-        };
+        const seg = allSegments[i];
 
-        animBtn.onclick = () => {
-            if (lastStrokes) animateTrajectory(lastStrokes);
-        };
-
-        // ============================================================
-        // FONCTIONS DE DESSIN CORRIGÉES
-        // ============================================================
-
-        /**
-         * Normalise les strokes pour s'assurer que toutes les coordonnées
-         * sont dans [0,1] — correction côté client en cas de problème serveur.
-         */
-        function normalizeStrokes(strokes) {
-            let xMin = Infinity, xMax = -Infinity;
-            let yMin = Infinity, yMax = -Infinity;
-
-            for (const stroke of strokes) {
-                for (const pt of stroke) {
-                    if (pt[0] < xMin) xMin = pt[0];
-                    if (pt[0] > xMax) xMax = pt[0];
-                    if (pt[1] < yMin) yMin = pt[1];
-                    if (pt[1] > yMax) yMax = pt[1];
-                }
-            }
-
-            const xRange = xMax - xMin || 1;
-            const yRange = yMax - yMin || 1;
-            const scale  = Math.max(xRange, yRange);
-
-            // Si déjà dans [0,1] avec marge, on ne touche à rien
-            if (xMin >= -0.01 && xMax <= 1.01 && yMin >= -0.01 && yMax <= 1.01) {
-                debugInfo.textContent = `✅ Coords OK [${xMin.toFixed(2)}, ${xMax.toFixed(2)}] × [${yMin.toFixed(2)}, ${yMax.toFixed(2)}]`;
-                return strokes;
-            }
-
-            debugInfo.textContent = `⚠️ Renorm. depuis [${xMin.toFixed(1)},${xMax.toFixed(1)}]×[${yMin.toFixed(1)},${yMax.toFixed(1)}]`;
-
-            return strokes.map(stroke =>
-                stroke.map(pt => [
-                    (pt[0] - xMin) / scale * 0.9 + 0.05,
-                    (pt[1] - yMin) / scale * 0.9 + 0.05
-                ])
-            );
+        if (seg.isFirst) {
+            // Nouveau trait — lever le stylo
+            ac.stroke();
+            ac.beginPath();
+            ac.moveTo(seg.pt.x, seg.pt.y);
+        } else {
+            ac.lineTo(seg.pt.x, seg.pt.y);
+            ac.stroke();
+            ac.beginPath();
+            ac.moveTo(seg.pt.x, seg.pt.y);
         }
 
-        function strokeToCanvas(pt, w, h) {
-            // Axe Y : les données calligraphiques ont souvent Y croissant vers le bas
-            // On essaie d'abord sans inversion, si le résultat est bizarre on peut changer
-            return [pt[0] * w, pt[1] * h];
-        }
+        setProgress((i / (total - 1)) * 100);
+        i++;
+        animReq = setTimeout(() => requestAnimationFrame(step), 60);
+    }
 
-        function drawTrajectory(strokes) {
-            const canvas = trajectoryCanvas;
-            const ctx    = canvas.getContext('2d');
-            const w = canvas.width;
-            const h = canvas.height;
+    animReq = setTimeout(() => requestAnimationFrame(step), 60);
+}
 
-            ctx.clearRect(0, 0, w, h);
+  /* ══════════════════════════════════════
+     EXPORT
+  ══════════════════════════════════════ */
+  function downloadPNG() {
+    if (lastPredictedPoints.length === 0) {
+      showToast('⚠ لا يوجد مسار للتصدير — قم بالتوليد أولاً');
+      return;
+    }
+    const link = document.createElement('a');
+    link.download = 'arabic_stroke.png';
+    link.href = animCanvas.toDataURL('image/png');
+    link.click();
+  }
 
-            if (!strokes || strokes.length === 0) {
-                ctx.fillStyle = '#999';
-                ctx.font = '14px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('Aucune trajectoire', w / 2, h / 2);
-                return;
-            }
+  function downloadJSON() {
+    if (lastPredictedPoints.length === 0) {
+      showToast('⚠ لا يوجد مسار للتصدير — قم بالتوليد أولاً');
+      return;
+    }
+    const blob = new Blob(
+      [JSON.stringify({ points: lastPredictedPoints }, null, 2)],
+      { type: 'application/json' }
+    );
+    const link = document.createElement('a');
+    link.download = 'arabic_stroke.json';
+    link.href = URL.createObjectURL(blob);
+    link.click();
+  }
+</script>
 
-            // Normalisation défensive côté client
-            const normStrokes = normalizeStrokes(strokes);
-
-            const palette = ['#1a2a6c', '#b21f1f', '#f0900a', '#28a745', '#9b27af', '#0097a7'];
-
-            for (let s = 0; s < normStrokes.length; s++) {
-                const stroke = normStrokes[s];
-                if (stroke.length < 2) {
-                    // Point isolé → petit cercle
-                    const [cx, cy] = strokeToCanvas(stroke[0], w, h);
-                    ctx.beginPath();
-                    ctx.arc(cx, cy, 2, 0, 2 * Math.PI);
-                    ctx.fillStyle = palette[s % palette.length];
-                    ctx.fill();
-                    continue;
-                }
-
-                ctx.beginPath();
-                const [sx, sy] = strokeToCanvas(stroke[0], w, h);
-                ctx.moveTo(sx, sy);
-
-                for (let i = 1; i < stroke.length; i++) {
-                    const [px, py] = strokeToCanvas(stroke[i], w, h);
-                    ctx.lineTo(px, py);
-                }
-
-                ctx.strokeStyle = palette[s % palette.length];
-                ctx.lineWidth   = 2.5;
-                ctx.lineJoin    = 'round';
-                ctx.lineCap     = 'round';
-                ctx.stroke();
-            }
-
-            // Marqueur début (vert)
-            const firstStroke = normStrokes[0];
-            if (firstStroke && firstStroke.length > 0) {
-                const [bx, by] = strokeToCanvas(firstStroke[0], w, h);
-                drawMarker(ctx, bx, by, '#28a745', 'Début');
-            }
-
-            // Marqueur fin (rouge)
-            const lastStroke = normStrokes[normStrokes.length - 1];
-            if (lastStroke && lastStroke.length > 0) {
-                const lastPt = lastStroke[lastStroke.length - 1];
-                const [ex, ey] = strokeToCanvas(lastPt, w, h);
-                drawMarker(ctx, ex, ey, '#dc3545', 'Fin');
-            }
-
-            debugInfo.textContent += ` | ${normStrokes.length} stroke(s), ${normStrokes.reduce((a,s) => a+s.length, 0)} pts`;
-        }
-
-        function drawMarker(ctx, x, y, color, label) {
-            ctx.beginPath();
-            ctx.arc(x, y, 7, 0, 2 * Math.PI);
-            ctx.fillStyle = color;
-            ctx.fill();
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            ctx.fillStyle = '#333';
-            ctx.font = 'bold 11px Segoe UI';
-            ctx.textAlign = 'center';
-            ctx.fillText(label, x, y - 12);
-        }
-
-        // ── Animation stroke par stroke ──
-        function animateTrajectory(strokes) {
-            const canvas = trajectoryCanvas;
-            const ctx    = canvas.getContext('2d');
-            const w = canvas.width;
-            const h = canvas.height;
-
-            ctx.clearRect(0, 0, w, h);
-            animBtn.disabled = true;
-
-            const normStrokes = normalizeStrokes(strokes);
-            const palette = ['#1a2a6c', '#b21f1f', '#f0900a', '#28a745', '#9b27af', '#0097a7'];
-
-            let s = 0, i = 0;
-
-            function step() {
-                if (s >= normStrokes.length) {
-                    // Terminé — dessiner les marqueurs
-                    drawTrajectory(strokes);
-                    animBtn.disabled = false;
-                    return;
-                }
-                const stroke = normStrokes[s];
-                if (i === 0) {
-                    ctx.beginPath();
-                    const [sx, sy] = strokeToCanvas(stroke[0], w, h);
-                    ctx.moveTo(sx, sy);
-                }
-                if (i < stroke.length - 1) {
-                    const [ax, ay] = strokeToCanvas(stroke[i], w, h);
-                    const [bx, by] = strokeToCanvas(stroke[i+1], w, h);
-                    ctx.strokeStyle = palette[s % palette.length];
-                    ctx.lineWidth   = 2.5;
-                    ctx.lineJoin    = 'round';
-                    ctx.lineCap     = 'round';
-                    ctx.beginPath();
-                    ctx.moveTo(ax, ay);
-                    ctx.lineTo(bx, by);
-                    ctx.stroke();
-                    i++;
-                    requestAnimationFrame(step);
-                } else {
-                    s++;
-                    i = 0;
-                    // Petite pause entre les strokes
-                    setTimeout(() => requestAnimationFrame(step), 80);
-                }
-            }
-            requestAnimationFrame(step);
-        }
-    </script>
 </body>
 </html>
