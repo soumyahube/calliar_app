@@ -42,28 +42,61 @@ cnn_service = CNNEncoderService(
 # ============================
 # CONVERSION TRAJECTOIRE → STROKES
 # ============================
-def traj_to_strokes(traj, threshold=0.05):
-    """Sépare la trajectoire en strokes pour l'affichage."""
-    strokes = []
-    current = [[float(traj[0][0]), float(traj[0][1])]]
+# ============================
+# CORRECTION : traj_to_strokes
+# ============================
+# Remplacez cette fonction dans votre app.py
 
-    for i in range(1, len(traj)):
-        dx = traj[i][0] - traj[i-1][0]
-        dy = traj[i][1] - traj[i-1][1]
+def traj_to_strokes(traj, threshold=0.15):
+    """
+    Sépare la trajectoire en strokes.
+    
+    CORRECTIONS APPORTÉES :
+    1. threshold augmenté de 0.05 → 0.15 (évite les micro-coupures)
+    2. Normalisation automatique si les coordonnées sont hors [0,1]
+    3. On garde un stroke même s'il n'a qu'un seul point (évite les pertes)
+    """
+    # --- Normalisation automatique ---
+    x_vals = traj[:, 0]
+    y_vals = traj[:, 1]
+    x_min, x_max = x_vals.min(), x_vals.max()
+    y_min, y_max = y_vals.min(), y_vals.max()
+
+    # Si les coordonnées ne sont pas déjà dans [0,1], on normalise
+    x_range = x_max - x_min if x_max != x_min else 1.0
+    y_range = y_max - y_min if y_max != y_min else 1.0
+
+    # Normaliser en gardant le ratio (padding de 5%)
+    scale = max(x_range, y_range)
+    traj_norm = traj.copy().astype(float)
+    traj_norm[:, 0] = (x_vals - x_min) / scale * 0.9 + 0.05
+    traj_norm[:, 1] = (y_vals - y_min) / scale * 0.9 + 0.05
+
+    # --- Découpage en strokes ---
+    strokes = []
+    current = [[float(traj_norm[0][0]), float(traj_norm[0][1])]]
+
+    for i in range(1, len(traj_norm)):
+        dx = traj_norm[i][0] - traj_norm[i-1][0]
+        dy = traj_norm[i][1] - traj_norm[i-1][1]
         dist = (dx**2 + dy**2) ** 0.5
 
         if dist > threshold:
-            if len(current) > 1:
+            # Saut détecté → nouveau stroke
+            if len(current) >= 1:
                 strokes.append(current)
-            current = [[float(traj[i][0]), float(traj[i][1])]]
+            current = [[float(traj_norm[i][0]), float(traj_norm[i][1])]]
         else:
-            current.append([float(traj[i][0]), float(traj[i][1])])
+            current.append([float(traj_norm[i][0]), float(traj_norm[i][1])])
 
-    if len(current) > 1:
+    if len(current) >= 1:
         strokes.append(current)
 
-    return strokes if strokes else [[[float(p[0]), float(p[1])] for p in traj]]
+    # Si tout a été découpé en points isolés, renvoyer la trajectoire complète
+    if not strokes or all(len(s) < 2 for s in strokes):
+        return [[[float(p[0]), float(p[1])] for p in traj_norm]]
 
+    return strokes
 # ============================
 # ROUTES
 # ============================
@@ -249,7 +282,80 @@ def debug_traj_word(word):
         </html>
         '''
     except Exception as e:
-        return f"Erreur: {e}"      
+        return f"Erreur: {e}"  
+
+@app.route('/check_json/<int:idx>', methods=['GET'])
+def check_json(idx):
+    """Vérifie la correspondance entre image et trajectoire"""
+    try:
+        traj = knn_service.train_trajs[idx]
+        text = knn_service.train_texts[idx]
+        
+        # Afficher les premiers points
+        points_str = " -> ".join([f"({traj[i][0]:.2f},{traj[i][1]:.2f})" for i in range(min(10, len(traj)))])
+        
+        return f'''
+        <html>
+        <body style="font-family:monospace; padding:20px">
+            <h2>Index: {idx}</h2>
+            <h3>Mot: <span style="color:blue">{text}</span></h3>
+            <p>Shape trajectoire: {traj.shape}</p>
+            <p>Premiers points: {points_str}...</p>
+            <hr>
+            <p>📌 Si le mot "{text}" n'a aucun sens avec l'image uploadée, alors le mapping image→JSON est faux.</p>
+            <p><a href="/">Retour</a></p>
+        </body>
+        </html>
+        '''
+    except Exception as e:
+        return f"Erreur: {e}"  
+
+@app.route('/debug_trajectory_data', methods=['GET'])
+def debug_trajectory_data():
+    """Vérifie les données des trajectoires stockées"""
+    try:
+        # Prendre une trajectoire exemple
+        idx = 0
+        traj = knn_service.train_trajs[idx]
+        text = knn_service.train_texts[idx]
+        
+        # Afficher les statistiques
+        info = f"""
+        <html>
+        <head><title>Debug Trajectoires</title></head>
+        <body style="font-family:monospace; padding:20px">
+            <h2>Analyse des trajectoires stockées</h2>
+            <h3>Mot: {text}</h3>
+            <p><strong>Shape:</strong> {traj.shape}</p>
+            <p><strong>Type:</strong> {type(traj)}</p>
+            <p><strong>X range:</strong> [{traj[:,0].min():.4f}, {traj[:,0].max():.4f}]</p>
+            <p><strong>Y range:</strong> [{traj[:,1].min():.4f}, {traj[:,1].max():.4f}]</p>
+            <p><strong>X mean:</strong> {traj[:,0].mean():.4f}</p>
+            <p><strong>Y mean:</strong> {traj[:,1].mean():.4f}</p>
+            
+            <h3>Premiers points (bruts):</h3>
+            <ul>
+        """
+        
+        for i in range(min(10, len(traj))):
+            info += f"<li>Point {i}: ({traj[i][0]:.6f}, {traj[i][1]:.6f})</li>"
+        
+        info += """
+            </ul>
+            
+            <h3>Problème possible:</h3>
+            <p>Si X range est [0, 1] et Y range est [0, 1], les coordonnées sont normalisées.</p>
+            <p>Si le dessin est inversé, c'est que Y n'a pas été correctement inversé.</p>
+            
+            <hr>
+            <a href="/">Retour</a>
+        </body>
+        </html>
+        """
+        
+        return info
+    except Exception as e:
+        return f"Erreur: {e}"  
 # Dans app.py, ajoutez :
 @app.route('/test_embedding', methods=['POST'])
 def test_embedding():

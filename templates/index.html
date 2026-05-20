@@ -25,6 +25,10 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .result-info { margin-top: 20px; padding: 15px; background: #d4edda; border-radius: 10px; border-left: 4px solid #28a745; }
         .result-info.error { background: #f8d7da; border-left-color: #dc3545; }
+
+        /* ── Animation de dessin ── */
+        #animBtn { background: linear-gradient(135deg, #28a745, #1a2a6c); margin-left: 10px; }
+        .debug-info { font-size: 11px; color: #888; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -39,6 +43,7 @@
             </div>
             <div style="text-align: center;">
                 <button id="predictBtn" disabled>🎯 Générer la trajectoire</button>
+                <button id="animBtn" disabled>▶️ Animer</button>
             </div>
             <div class="preview-container" id="previewContainer" style="display: none;">
                 <div class="preview-box">
@@ -48,6 +53,7 @@
                 <div class="preview-box">
                     <h3>✍️ Trajectoire</h3>
                     <canvas id="trajectoryCanvas" width="400" height="400"></canvas>
+                    <div class="debug-info" id="debugInfo"></div>
                 </div>
             </div>
             <div id="resultDiv" style="display: none;"></div>
@@ -55,14 +61,17 @@
     </div>
 
     <script>
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        const predictBtn = document.getElementById('predictBtn');
+        const uploadArea   = document.getElementById('uploadArea');
+        const fileInput    = document.getElementById('fileInput');
+        const predictBtn   = document.getElementById('predictBtn');
+        const animBtn      = document.getElementById('animBtn');
         const previewContainer = document.getElementById('previewContainer');
         const previewImage = document.getElementById('previewImage');
         const trajectoryCanvas = document.getElementById('trajectoryCanvas');
-        const resultDiv = document.getElementById('resultDiv');
+        const resultDiv    = document.getElementById('resultDiv');
+        const debugInfo    = document.getElementById('debugInfo');
         let currentImageData = null;
+        let lastStrokes = null;
 
         uploadArea.onclick = () => fileInput.click();
         fileInput.onchange = (e) => { if (e.target.files.length) handleImage(e.target.files[0]); };
@@ -81,12 +90,14 @@
                 previewImage.src = currentImageData;
                 previewContainer.style.display = 'flex';
                 predictBtn.disabled = false;
+                animBtn.disabled = true;
                 resultDiv.style.display = 'none';
                 const ctx = trajectoryCanvas.getContext('2d');
                 ctx.clearRect(0, 0, trajectoryCanvas.width, trajectoryCanvas.height);
-                ctx.fillStyle = '#999';
+                ctx.fillStyle = '#bbb';
                 ctx.font = '14px Arial';
-                ctx.fillText('En attente...', 160, 200);
+                ctx.textAlign = 'center';
+                ctx.fillText('En attente de génération...', 200, 200);
             };
             reader.readAsDataURL(file);
         }
@@ -94,6 +105,7 @@
         predictBtn.onclick = async () => {
             if (!currentImageData) return;
             predictBtn.disabled = true;
+            animBtn.disabled = true;
             predictBtn.innerHTML = '🔄 Génération... <span class="loader"></span>';
             try {
                 const res = await fetch('/predict', {
@@ -103,8 +115,15 @@
                 });
                 const data = await res.json();
                 if (res.ok) {
+                    lastStrokes = data.strokes;
                     drawTrajectory(data.strokes);
-                    resultDiv.innerHTML = `<div class="result-info">✅ <strong>Résultat</strong><br>📝 Mot trouvé: <strong>${data.best_match || '?'}</strong><br>🎯 Confiance: ${(data.confidence * 100).toFixed(1)}%<br>⏱️ Temps: ${data.time}s</div>`;
+                    animBtn.disabled = false;
+                    resultDiv.innerHTML = `<div class="result-info">
+                        ✅ <strong>Résultat</strong><br>
+                        📝 Mot trouvé: <strong>${data.best_match || '?'}</strong><br>
+                        🎯 Confiance: ${(data.confidence * 100).toFixed(1)}%<br>
+                        ⏱️ Temps: ${data.time}s
+                    </div>`;
                     resultDiv.style.display = 'block';
                 } else {
                     resultDiv.innerHTML = `<div class="result-info error">❌ Erreur: ${data.error}</div>`;
@@ -119,64 +138,188 @@
             }
         };
 
+        animBtn.onclick = () => {
+            if (lastStrokes) animateTrajectory(lastStrokes);
+        };
+
         // ============================================================
-        // FONCTION DE DESSIN CORRIGÉE
+        // FONCTIONS DE DESSIN CORRIGÉES
         // ============================================================
+
+        /**
+         * Normalise les strokes pour s'assurer que toutes les coordonnées
+         * sont dans [0,1] — correction côté client en cas de problème serveur.
+         */
+        function normalizeStrokes(strokes) {
+            let xMin = Infinity, xMax = -Infinity;
+            let yMin = Infinity, yMax = -Infinity;
+
+            for (const stroke of strokes) {
+                for (const pt of stroke) {
+                    if (pt[0] < xMin) xMin = pt[0];
+                    if (pt[0] > xMax) xMax = pt[0];
+                    if (pt[1] < yMin) yMin = pt[1];
+                    if (pt[1] > yMax) yMax = pt[1];
+                }
+            }
+
+            const xRange = xMax - xMin || 1;
+            const yRange = yMax - yMin || 1;
+            const scale  = Math.max(xRange, yRange);
+
+            // Si déjà dans [0,1] avec marge, on ne touche à rien
+            if (xMin >= -0.01 && xMax <= 1.01 && yMin >= -0.01 && yMax <= 1.01) {
+                debugInfo.textContent = `✅ Coords OK [${xMin.toFixed(2)}, ${xMax.toFixed(2)}] × [${yMin.toFixed(2)}, ${yMax.toFixed(2)}]`;
+                return strokes;
+            }
+
+            debugInfo.textContent = `⚠️ Renorm. depuis [${xMin.toFixed(1)},${xMax.toFixed(1)}]×[${yMin.toFixed(1)},${yMax.toFixed(1)}]`;
+
+            return strokes.map(stroke =>
+                stroke.map(pt => [
+                    (pt[0] - xMin) / scale * 0.9 + 0.05,
+                    (pt[1] - yMin) / scale * 0.9 + 0.05
+                ])
+            );
+        }
+
+        function strokeToCanvas(pt, w, h) {
+            // Axe Y : les données calligraphiques ont souvent Y croissant vers le bas
+            // On essaie d'abord sans inversion, si le résultat est bizarre on peut changer
+            return [pt[0] * w, pt[1] * h];
+        }
+
         function drawTrajectory(strokes) {
             const canvas = trajectoryCanvas;
-            const ctx = canvas.getContext('2d');
+            const ctx    = canvas.getContext('2d');
             const w = canvas.width;
             const h = canvas.height;
-            
+
             ctx.clearRect(0, 0, w, h);
-            
+
             if (!strokes || strokes.length === 0) {
                 ctx.fillStyle = '#999';
                 ctx.font = '14px Arial';
-                ctx.fillText('Aucune trajectoire', w / 2 - 60, h / 2);
+                ctx.textAlign = 'center';
+                ctx.fillText('Aucune trajectoire', w / 2, h / 2);
                 return;
             }
-            
-            const colors = ['#1a2a6c', '#b21f1f', '#fdbb4d', '#28a745'];
-            
-            for (let s = 0; s < strokes.length; s++) {
-                const stroke = strokes[s];
-                if (stroke.length < 2) continue;
-                
-                ctx.beginPath();
-                ctx.moveTo(stroke[0][0] * w, h - (stroke[0][1] * h));
-                for (let i = 1; i < stroke.length; i++) {
-                    ctx.lineTo(stroke[i][0] * w, h - (stroke[i][1] * h));
+
+            // Normalisation défensive côté client
+            const normStrokes = normalizeStrokes(strokes);
+
+            const palette = ['#1a2a6c', '#b21f1f', '#f0900a', '#28a745', '#9b27af', '#0097a7'];
+
+            for (let s = 0; s < normStrokes.length; s++) {
+                const stroke = normStrokes[s];
+                if (stroke.length < 2) {
+                    // Point isolé → petit cercle
+                    const [cx, cy] = strokeToCanvas(stroke[0], w, h);
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 2, 0, 2 * Math.PI);
+                    ctx.fillStyle = palette[s % palette.length];
+                    ctx.fill();
+                    continue;
                 }
-                ctx.strokeStyle = colors[s % colors.length];
-                ctx.lineWidth = 2.5;
+
+                ctx.beginPath();
+                const [sx, sy] = strokeToCanvas(stroke[0], w, h);
+                ctx.moveTo(sx, sy);
+
+                for (let i = 1; i < stroke.length; i++) {
+                    const [px, py] = strokeToCanvas(stroke[i], w, h);
+                    ctx.lineTo(px, py);
+                }
+
+                ctx.strokeStyle = palette[s % palette.length];
+                ctx.lineWidth   = 2.5;
+                ctx.lineJoin    = 'round';
+                ctx.lineCap     = 'round';
                 ctx.stroke();
             }
-            
-            // Début
-            if (strokes[0] && strokes[0].length > 0) {
-                const start = strokes[0][0];
-                ctx.beginPath();
-                ctx.arc(start[0] * w, h - (start[1] * h), 7, 0, 2 * Math.PI);
-                ctx.fillStyle = '#28a745';
-                ctx.fill();
-                ctx.fillStyle = 'black';
-                ctx.font = 'bold 11px Arial';
-                ctx.fillText('Début', start[0] * w - 15, h - (start[1] * h) - 8);
+
+            // Marqueur début (vert)
+            const firstStroke = normStrokes[0];
+            if (firstStroke && firstStroke.length > 0) {
+                const [bx, by] = strokeToCanvas(firstStroke[0], w, h);
+                drawMarker(ctx, bx, by, '#28a745', 'Début');
             }
-            
-            // Fin
-            const lastStroke = strokes[strokes.length - 1];
+
+            // Marqueur fin (rouge)
+            const lastStroke = normStrokes[normStrokes.length - 1];
             if (lastStroke && lastStroke.length > 0) {
-                const end = lastStroke[lastStroke.length - 1];
-                ctx.beginPath();
-                ctx.arc(end[0] * w, h - (end[1] * h), 7, 0, 2 * Math.PI);
-                ctx.fillStyle = '#dc3545';
-                ctx.fill();
-                ctx.fillStyle = 'black';
-                ctx.font = 'bold 11px Arial';
-                ctx.fillText('Fin', end[0] * w - 8, h - (end[1] * h) - 8);
+                const lastPt = lastStroke[lastStroke.length - 1];
+                const [ex, ey] = strokeToCanvas(lastPt, w, h);
+                drawMarker(ctx, ex, ey, '#dc3545', 'Fin');
             }
+
+            debugInfo.textContent += ` | ${normStrokes.length} stroke(s), ${normStrokes.reduce((a,s) => a+s.length, 0)} pts`;
+        }
+
+        function drawMarker(ctx, x, y, color, label) {
+            ctx.beginPath();
+            ctx.arc(x, y, 7, 0, 2 * Math.PI);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 11px Segoe UI';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, x, y - 12);
+        }
+
+        // ── Animation stroke par stroke ──
+        function animateTrajectory(strokes) {
+            const canvas = trajectoryCanvas;
+            const ctx    = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.clearRect(0, 0, w, h);
+            animBtn.disabled = true;
+
+            const normStrokes = normalizeStrokes(strokes);
+            const palette = ['#1a2a6c', '#b21f1f', '#f0900a', '#28a745', '#9b27af', '#0097a7'];
+
+            let s = 0, i = 0;
+
+            function step() {
+                if (s >= normStrokes.length) {
+                    // Terminé — dessiner les marqueurs
+                    drawTrajectory(strokes);
+                    animBtn.disabled = false;
+                    return;
+                }
+                const stroke = normStrokes[s];
+                if (i === 0) {
+                    ctx.beginPath();
+                    const [sx, sy] = strokeToCanvas(stroke[0], w, h);
+                    ctx.moveTo(sx, sy);
+                }
+                if (i < stroke.length - 1) {
+                    const [ax, ay] = strokeToCanvas(stroke[i], w, h);
+                    const [bx, by] = strokeToCanvas(stroke[i+1], w, h);
+                    ctx.strokeStyle = palette[s % palette.length];
+                    ctx.lineWidth   = 2.5;
+                    ctx.lineJoin    = 'round';
+                    ctx.lineCap     = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(ax, ay);
+                    ctx.lineTo(bx, by);
+                    ctx.stroke();
+                    i++;
+                    requestAnimationFrame(step);
+                } else {
+                    s++;
+                    i = 0;
+                    // Petite pause entre les strokes
+                    setTimeout(() => requestAnimationFrame(step), 80);
+                }
+            }
+            requestAnimationFrame(step);
         }
     </script>
 </body>
