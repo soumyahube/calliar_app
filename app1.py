@@ -15,7 +15,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from services.knn_service import KNNTrajectoryService
 from services.cnn_encoder import CNNEncoderService
-from services.ocr_service import ArabicOCRService
+
 app = Flask(__name__)
 
 # ============================
@@ -39,11 +39,13 @@ cnn_service = CNNEncoderService(
     model_path=MODEL_PATH,  
     embedding_dim=128
 )
-ocr_service = ArabicOCRService()
 # ============================
 # CONVERSION TRAJECTOIRE → STROKES
 # ============================
-
+# ============================
+# CORRECTION : traj_to_strokes
+# ============================
+# Remplacez cette fonction dans votre app.py
 
 def traj_to_strokes(traj, threshold=0.15):
     """
@@ -98,94 +100,6 @@ def traj_to_strokes(traj, threshold=0.15):
 # ============================
 # ROUTES
 # ============================
-#test11111111
-@app.route('/debug_ocr', methods=['POST'])
-def debug_ocr():
-    """Teste uniquement l'OCR et retourne ce qu'il lit"""
-    try:
-        data = request.get_json()
-        if not data or 'image' not in data:
-            return jsonify({'error': 'Pas d image'}), 400
-
-        word, confidence = ocr_service.read_word(data['image'])
-
-        return jsonify({
-            'detected_word': word,
-            'ocr_confidence': confidence,
-            'word_length': len(word) if word else 0,
-            'word_bytes': [hex(ord(c)) for c in word] if word else []
-            # word_bytes permet de voir les vrais caractères arabes Unicode
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    
-
-
-@app.route('/debug_full_pipeline', methods=['POST'])
-def debug_full_pipeline():
-    """Trace toute la pipeline: image → OCR → KNN → trajectoire"""
-    try:
-        import difflib
-        data = request.get_json()
-        if not data or 'image' not in data:
-            return jsonify({'error': 'Pas d image'}), 400
-
-        # Étape 1 : OCR
-        detected_word, ocr_conf = ocr_service.read_word(data['image'])
-
-        if not detected_word:
-            return jsonify({'step_failed': 'OCR', 'reason': 'Aucun texte détecté'})
-
-        # Étape 2 : Chercher dans le dataset
-        train_texts = list(knn_service.train_texts)
-
-        # Exact match ?
-        exact_matches = [t for t in train_texts if t.strip() == detected_word.strip()]
-
-        # Top 5 fuzzy matches
-        fuzzy_matches = difflib.get_close_matches(
-            detected_word, train_texts, n=5, cutoff=0.0  # cutoff=0 → voir tous
-        )
-        fuzzy_scores = [
-            {
-                'word': m,
-                'score': round(difflib.SequenceMatcher(None, detected_word, m).ratio(), 3)
-            }
-            for m in fuzzy_matches
-        ]
-
-        # Étape 3 : Trajectoire récupérée
-        best_match = exact_matches[0] if exact_matches else (fuzzy_matches[0] if fuzzy_matches else None)
-        traj_info = None
-        if best_match:
-            idx = train_texts.index(best_match)
-            traj = knn_service.train_trajs[idx]
-            traj_info = {
-                'shape': list(traj.shape),
-                'x_range': [round(float(traj[:,0].min()), 3), round(float(traj[:,0].max()), 3)],
-                'y_range': [round(float(traj[:,1].min()), 3), round(float(traj[:,1].max()), 3)],
-            }
-
-        return jsonify({
-            'step1_ocr': {
-                'detected_word': detected_word,
-                'confidence': ocr_conf,
-                'unicode_chars': [hex(ord(c)) for c in detected_word]
-            },
-            'step2_matching': {
-                'exact_match_found': len(exact_matches) > 0,
-                'exact_matches': exact_matches[:3],
-                'top5_fuzzy': fuzzy_scores,
-                'dataset_size': len(train_texts)
-            },
-            'step3_trajectory': traj_info
-        })
-
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-    
-    #FIN11111111111111
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -461,71 +375,6 @@ def test_embedding():
             'embedding_norm': float(np.linalg.norm(embedding))
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-print("✅ ROUTE predict_canvas LOADED")
-@app.route('/predict_canvas', methods=['POST'])
-def predict_canvas():
-    if knn_service is None:
-        return jsonify({'error': 'Service KNN non disponible'}), 500
-    try:
-        import difflib, time
-        start_time = time.time()
-        data = request.get_json()
-
-        if not data or 'image' not in data:
-            return jsonify({'error': 'Aucune image fournie'}), 400
-
-        # 1. EasyOCR lit le mot arabe dessiné
-        detected_word, ocr_confidence = ocr_service.read_word(data['image'])
-
-        if not detected_word:
-            return jsonify({'error': 'Aucun texte détecté dans le dessin'}), 404
-
-        # 2. Chercher dans train_texts
-        train_texts = list(knn_service.train_texts)
-
-        # Exact match
-        for i, text in enumerate(train_texts):
-            if text.strip() == detected_word.strip():
-                traj    = knn_service.train_trajs[i].copy()
-                strokes = traj_to_strokes(traj)
-                return jsonify({
-                    'strokes':        strokes,
-                    'points':         traj.tolist(),
-                    'detected_word':  detected_word,
-                    'best_match':     text,
-                    'confidence':     1.0,
-                    'match_type':     'exact',
-                    'time':           round(time.time() - start_time, 3)
-                })
-
-        # Fuzzy match
-        matches = difflib.get_close_matches(
-            detected_word, train_texts, n=1, cutoff=0.4
-        )
-        if matches:
-            best  = matches[0]
-            idx   = train_texts.index(best)
-            score = difflib.SequenceMatcher(None, detected_word, best).ratio()
-            traj  = knn_service.train_trajs[idx].copy()
-            strokes = traj_to_strokes(traj)
-            return jsonify({
-                'strokes':        strokes,
-                'points':         traj.tolist(),
-                'detected_word':  detected_word,
-                'best_match':     best,
-                'confidence':     round(score, 4),
-                'match_type':     'fuzzy',
-                'time':           round(time.time() - start_time, 3)
-            })
-
-        return jsonify({
-            'error':          f"Mot '{detected_word}' non trouvé dans le dataset",
-            'detected_word':  detected_word
-        }), 200
-
-    except Exception as e:
-        import traceback; traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 # ============================
 # LANCEMENT

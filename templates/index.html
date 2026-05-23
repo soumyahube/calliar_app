@@ -241,11 +241,12 @@
       border: 0.5px solid var(--border);
       border-radius: 12px;
       overflow: hidden;
-      background: #ffffff;
-      aspect-ratio: 1 / 1;
-      max-height: 300px;
-      position: relative;
+      background: #000000;
+      aspect-ratio: unset;
+      height: 300px;       /* hauteur fixe */
+      max-height: unset;
     }
+    
     canvas#animCanvas {
       display: block;
       width: 100%; height: 100%;
@@ -407,7 +408,6 @@
     <div class="logo-mark">ب</div>
     <div class="logo-text">
       <h1>Arabic Stroke Generator</h1>
-      <p>CNN + LSTM · deep learning</p>
     </div>
   </div>
   <span class="badge">v1.0.0</span>
@@ -437,7 +437,7 @@
       <div class="canvas-container">
         <canvas id="drawCanvas" width="400" height="400"></canvas>
         <div class="canvas-overlay" id="canvasOverlay">
-          <span>ارسم حرفاً أو كلمة واحدة هنا</span>
+          <span>اكتب حرفاً أو كلمة واحدة هنا</span>
         </div>
         <div class="canvas-limit-overlay" id="limitOverlay">
           <span>⚠ كلمة واحدة فقط — امسح وأعد الرسم</span>
@@ -453,12 +453,11 @@
       <!-- bannière avertissement mot unique -->
       <div class="limit-banner" id="limitBanner">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        النموذج يتعرف على <strong>كلمة واحدة فقط</strong> — سيعيد أقرب كلمة من قاعدة البيانات
       </div>
 
       <p class="hint">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        ارسم حرفاً أو كلمة واحدة واضحة بخط عريض — مثال : ب ، نور ، سلام
+        اكتب حرفاً أو كلمة واضحة بخط عريض 
       </p>
     </div>
 
@@ -467,7 +466,7 @@
       <div class="upload-zone" onclick="document.getElementById('fileInput').click()" id="dropZone">
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 12l2 2 4-4"/></svg>
         <p>انقر لاختيار صورة</p>
-        <span>PNG · JPG · حرف عربي معزول</span>
+        <span>PNG · JPG  </span>
       </div>
       <div id="previewWrap">
         <img id="previewImg" alt="معاينة الحرف" />
@@ -475,7 +474,7 @@
       <input type="file" id="fileInput" accept="image/*" />
       <p class="hint">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        صورة بخلفية بيضاء — <strong>كلمة واحدة</strong> معزولة، 64×64 px على الأقل
+        صورة بخلفية بيضاء — <strong>كلمة واحدة</strong> 
       </p>
     </div>
 
@@ -503,7 +502,6 @@
         <canvas id="animCanvas" width="400" height="400"></canvas>
         <div class="anim-placeholder" id="animPlaceholder">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1"><path d="M3 21l9-9m0 0l2-6 4 4-6 2z"/></svg>
-          <p>المسار المُولَّد سيظهر هنا</p>
         </div>
       </div>
     </div>
@@ -573,63 +571,72 @@
   dc.fillStyle = '#ffffff';
   dc.fillRect(0, 0, 400, 400);
   dc.strokeStyle = '#111111';
-  dc.lineWidth = 2;
+  dc.lineWidth = 10;
   dc.lineCap = 'round';
   dc.lineJoin = 'round';
 
   const animCanvas = document.getElementById('animCanvas');
   const ac = animCanvas.getContext('2d');
-  ac.fillStyle = '#ffffff';
+  ac.fillStyle = '#000000';
   ac.fillRect(0, 0, 400, 400);
   function preprocessCanvas(canvas) {
-      const ctx = canvas.getContext('2d');
-      const w = canvas.width;
-      const h = canvas.height;
-      const pixels = ctx.getImageData(0, 0, w, h).data;
- 
-       // 1. Trouver la bounding box du dessin
-        let xMin = w, xMax = 0, yMin = h, yMax = 0;
-        for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
-                const r = pixels[(y * w + x) * 4];
-                if (r < 128) { // pixel noir
-                   if (x < xMin) xMin = x;
-                   if (x > xMax) xMax = x;
-                   if (y < yMin) yMin = y;
-                   if (y > yMax) yMax = y;
-                }
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    const pixels = ctx.getImageData(0, 0, w, h).data;
+
+    // 1. Bounding box
+    let xMin = w, xMax = 0, yMin = h, yMax = 0;
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const r = pixels[(y * w + x) * 4];
+            if (r < 128) {
+                if (x < xMin) xMin = x;
+                if (x > xMax) xMax = x;
+                if (y < yMin) yMin = y;
+                if (y > yMax) yMax = y;
             }
         }
+    }
 
-       // Si rien de dessiné
-       if (xMin >= xMax || yMin >= yMax) return canvas.toDataURL('image/png');
+    if (xMin >= xMax || yMin >= yMax) return canvas.toDataURL('image/png');
 
-       // 2. Ajouter padding de 10%
-       const pw = Math.round((xMax - xMin) * 0.1);
-       const ph = Math.round((yMax - yMin) * 0.1);
-       xMin = Math.max(0, xMin - pw);
-       xMax = Math.min(w, xMax + pw);
-       yMin = Math.max(0, yMin - ph);
-       yMax = Math.min(h, yMax + ph);
+    // 2. Padding généreux (20%)
+    const pw = Math.round((xMax - xMin) * 0.2);
+    const ph = Math.round((yMax - yMin) * 0.2);
+    xMin = Math.max(0, xMin - pw);
+    xMax = Math.min(w, xMax + pw);
+    yMin = Math.max(0, yMin - ph);
+    yMax = Math.min(h, yMax + ph);
 
-       // 3. Recadrer et redimensionner en 224x224
-       const offscreen = document.createElement('canvas');
-       offscreen.width = 224;
-       offscreen.height = 224;
-       const octx = offscreen.getContext('2d');
+    // 3. Redimensionner en 640x640 (mieux pour EasyOCR)
+    const offscreen = document.createElement('canvas');
+    offscreen.width  = 640;
+    offscreen.height = 640;
+    const octx = offscreen.getContext('2d');
 
-       //  Fond blanc
-       octx.fillStyle = '#ffffff';
-       octx.fillRect(0, 0, 224, 224);
+    // Fond blanc
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0, 0, 640, 640);
 
-       // Copier la zone recadrée en 224x224
-        octx.drawImage(canvas,
-          xMin, yMin, xMax - xMin, yMax - yMin,
-          0, 0, 224, 224
-        );
+    // Centrer le dessin avec padding
+    const cropW = xMax - xMin;
+    const cropH = yMax - yMin;
+    const scale = Math.min(560 / cropW, 560 / cropH);
+    const destW = cropW * scale;
+    const destH = cropH * scale;
+    const destX = (640 - destW) / 2;
+    const destY = (640 - destH) / 2;
 
-        return offscreen.toDataURL('image/png');
- }
+    octx.drawImage(canvas, xMin, yMin, cropW, cropH, destX, destY, destW, destH);
+
+    // 4. Épaissir le trait (dilate effect)
+    octx.filter = 'blur(1px)';
+    octx.drawImage(offscreen, 0, 0);
+    octx.filter = 'none';
+
+    return offscreen.toDataURL('image/png');
+  }
   /* ══════════════════════════════════════
      DRAW EVENTS
   ══════════════════════════════════════ */
@@ -744,7 +751,7 @@
     updateStrokeCounter();
     document.getElementById('canvasOverlay').style.opacity = '1';
 
-    ac.fillStyle = '#ffffff';
+    ac.fillStyle = '#000000';
     ac.fillRect(0, 0, 400, 400);
     document.getElementById('animPlaceholder').style.display = 'flex';
 
@@ -810,13 +817,14 @@
 
     if (animReq) cancelAnimationFrame(animReq);
     document.getElementById('animPlaceholder').style.display = 'none';
-    setStatus('running', 'ترميز CNN…');
+    setStatus('running', 'جار المعالجة....');
     setProgress(0);
 
     try {
       const t0 = performance.now();
 
-      const res = await fetch('/predict', {
+      const endpoint = activeTab === 'draw' ? '/predict_canvas' : '/predict';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageData })
@@ -825,7 +833,11 @@
       if (!res.ok) throw new Error('خطأ في الخادم : ' + res.status);
 
       const data = await res.json();
-
+      if (data.error) {
+        showToast('❌ ' + data.error);
+        setStatus('error', data.error);
+        return;
+        }
       const elapsed = data.time !== undefined
         ? data.time.toFixed(2)
         : ((performance.now() - t0) / 1000).toFixed(2);
@@ -840,7 +852,7 @@
 
       // Afficher le mot trouvé dans la status bar
       const matchLabel = data.best_match ? ` — « ${data.best_match} »` : '';
-      setStatus('done', 'تم التوليد' + matchLabel + ' ✓');
+      setStatus('done', 'جار الكتابة ' + matchLabel + ' ✓');
 
       animateStroke(data.points, data.strokes);
 
@@ -858,7 +870,7 @@
     if (!points || points.length < 2) return;
 
     // Fond noir
-    ac.fillStyle = '#ffffff';
+    ac.fillStyle = '#000000';
     ac.fillRect(0, 0, 400, 400);
 
     // Normaliser dans [pad, 400-pad]
@@ -920,7 +932,7 @@
     ac.arc(norm[0].x, norm[0].y, 5, 0, Math.PI*2);
     ac.fill();
 
-    ac.strokeStyle = '#1a1a1a';
+    ac.strokeStyle = '#D4A017';
     ac.lineWidth   = 2.5;
     ac.lineCap     = 'round';
     ac.lineJoin    = 'round';
@@ -938,7 +950,7 @@
                    allSegments[total-1].pt.y, 5, 0, Math.PI*2);
             ac.fill();
             setProgress(100);
-            setStatus('done', 'اكتمل التوليد ✓');
+            setStatus('done', 'اكتمل ✓');
             return;
         }
 
@@ -962,7 +974,7 @@
     }
 
     animReq = setTimeout(() => requestAnimationFrame(step), 60);
-}
+  }
 
   /* ══════════════════════════════════════
      EXPORT
